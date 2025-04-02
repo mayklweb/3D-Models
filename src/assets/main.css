@@ -1,0 +1,55 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  html,
+  body,
+  .wrapper {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .ant-layout {
+    height: 100%;
+  }
+  
+  .main-content {
+    margin: 24px 16px;
+    padding: 24px;
+    min-height: 280px;
+    background-color: #fff;
+    border-radius: 8px;
+  }
+  
+  .ant-layout-sider-children {
+    background-color: #fff;
+  }
+  
+  .collapse-button {
+    font-size: 16px;
+    width: 64px;
+    height: 64px;
+  }
+  
+  .header{
+    padding: 0;
+    background-color: #fff;
+  }
+  
+  .demo-logo-vertical{
+    width: 70%;
+    height: 40px;
+    background-color: #888;
+    border-radius: 12px;
+    margin: 12px auto;
+  }
+  
+  .login-page{
+    /* width: 100%; */
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
