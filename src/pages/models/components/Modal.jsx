@@ -16,7 +16,14 @@ const GLBViewer = ({ fileUrl }) => {
   return <primitive object={scene} scale={2} />;
 };
 
-const ModelsModal = ({ open, form, setOpen, setIsUpdate, isUpdate, reload }) => {
+const ModelsModal = ({
+  open,
+  form,
+  setOpen,
+  setIsUpdate,
+  isUpdate,
+  reload,
+}) => {
   const postRequest = usePostRequest({ url: carsPost });
   const patchRequest = usePatchRequest();
   const { response: categories, loading: CategoriesLoading } = useLoad({
@@ -47,7 +54,7 @@ const ModelsModal = ({ open, form, setOpen, setIsUpdate, isUpdate, reload }) => 
     setOpen(false);
     setIsUpdate(null);
     form.resetFields();
-    setFileUrl(null)
+    setFileUrl(null);
   };
 
   const handleFinish = async (data) => {
