@@ -11,7 +11,7 @@ const { Option } = Select;
 
 const { Dragger } = Upload;
 
-const GLBViewer = ({ fileUrl }) => {
+const GLBViewer = ({ fileUrl, file, setFile }) => {
   const { scene } = useGLTF(fileUrl);
   return <primitive object={scene} scale={2} />;
 };
@@ -23,14 +23,14 @@ const ModelsModal = ({
   setIsUpdate,
   isUpdate,
   reload,
+  file,
+  setFile
 }) => {
   const postRequest = usePostRequest({ url: carsPost });
   const patchRequest = usePatchRequest();
   const { response: categories, loading: CategoriesLoading } = useLoad({
     url: categoriesList,
   });
-
-  const [fileUrl, setFileUrl] = useState(null);
 
   const props = {
     accept: ".glb",
@@ -46,6 +46,7 @@ const ModelsModal = ({
 
       const url = URL.createObjectURL(file);
       setFileUrl(url);
+      setFile(file); // Yangi faylni saqlash
       return false;
     },
   };
@@ -60,11 +61,22 @@ const ModelsModal = ({
   const handleFinish = async (data) => {
     console.log("Form Data:", data);
     console.log("File URL:", fileUrl);
+    console.log("File:", file); // ✅ Fayl bor yoki yo‘qligini tekshiramiz
+
+    if (!file) {
+      message.error("No file selected!");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("name", data.name);
     formData.append("category", data.category);
-    formData.append("file", data.file.originFileObj || data.file); // Ensure it's a File object
+    formData.append("file", file); // ✅ Ensuring a File object is added
+
+    // FormData ichidagi qiymatlarni konsolga chiqarib ko‘ramiz
+    for (let [key, value] of formData.entries()) {
+      console.log(`${key}:`, value);
+    }
 
     try {
       const { success } = isUpdate
@@ -85,6 +97,7 @@ const ModelsModal = ({
       }
     } catch (error) {
       console.error("Upload failed:", error);
+      message.error("Upload failed. Please try again.");
     }
   };
 
@@ -164,7 +177,7 @@ const ModelsModal = ({
               </Form.Item>
             </Col>
             <Col span={24}>
-              {fileUrl && (
+              {file && (
                 <Canvas
                   style={{
                     width: "100%",
@@ -174,7 +187,7 @@ const ModelsModal = ({
                 >
                   <ambientLight intensity={0.5} />
                   <directionalLight position={[2, 2, 2]} />
-                  <GLBViewer fileUrl={fileUrl} />
+                  <GLBViewer fileUrl={file} />
                   <OrbitControls />
                 </Canvas>
               )}

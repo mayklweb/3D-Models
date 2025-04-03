@@ -20,6 +20,10 @@ export default function Models() {
   const [open, setOpen] = useState(false);
   const [isUpdate, setIsUpdate] = useState(null);
   const deleteModal = useDeleteModal();
+  const [file, setFile] = useState(null); // Foydalanuvchi yangi fayl yuklasa
+  const [apiUrl, setApiUrl] = useState(null); // API dan kelgan eski model URL
+  
+
 
   const {
     response: cars,
@@ -27,8 +31,6 @@ export default function Models() {
     request: reload,
   } = useLoad({ url: carsList });
 
-  console.log(cars);
-  
 
   const handleAdd = () => {
     setOpen(true);
@@ -39,19 +41,23 @@ export default function Models() {
   const openSuccessNotification = () => {
     api.success({
       message: isUpdate
-        ? "Cartegory updated successful!"
-        : "Cartegory created successful!",
+        ? "Model updated successful!"
+        : "Model created successful!",
     });
   };
 
   const handleEdit = (item) => {
+    console.log(item);
+    setFile(item.file)
+    console.log(item.file);
+    
     form.setFieldsValue(item);
     setIsUpdate(item.id);
     setOpen(true);
   };
 
   const handleViewCar = (car) => {
-    console.log(car);
+    // console.log(car);
   };
 
   const columns = [
@@ -72,7 +78,7 @@ export default function Models() {
       render: (item) => (
         <Space>
           <Button icon={<EditOutlined />} onClick={() => handleEdit(item)} />
-          <Button icon={<EyeOutlined />} onClick={handleViewCar} />
+          <Button icon={<EyeOutlined />} onClick={handleViewCar(item)} />
           <Button
             icon={<DeleteOutlined />}
             danger
@@ -117,6 +123,10 @@ export default function Models() {
           setOpen={setOpen}
           isUpdate={isUpdate}
           setIsUpdate={setIsUpdate}
+          file={file}
+          setFile={setFile}
+          apiUrl={apiUrl}
+          setApiUrl={setApiUrl}
           openSuccessNotification={openSuccessNotification}
         />
       </div>
