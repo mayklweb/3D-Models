@@ -20,7 +20,7 @@ export default function Models() {
   const [open, setOpen] = useState(false);
   const [isUpdate, setIsUpdate] = useState(null);
   const deleteModal = useDeleteModal();
-  const [file, setFile] = useState(null); // Foydalanuvchi yangi fayl yuklasa
+  const [carFileUrl, setCarFileUrl] = useState(null);
   const [apiUrl, setApiUrl] = useState(null); // API dan kelgan eski model URL
   
 
@@ -48,7 +48,7 @@ export default function Models() {
 
   const handleEdit = (item) => {
     console.log(item);
-    setFile(item.file)
+    setCarFileUrl(item.file)
     console.log(item.file);
     
     form.setFieldsValue(item);
@@ -123,8 +123,8 @@ export default function Models() {
           setOpen={setOpen}
           isUpdate={isUpdate}
           setIsUpdate={setIsUpdate}
-          file={file}
-          setFile={setFile}
+          carFileUrl={carFileUrl}
+          setCarFileUrl={setCarFileUrl}
           apiUrl={apiUrl}
           setApiUrl={setApiUrl}
           openSuccessNotification={openSuccessNotification}
