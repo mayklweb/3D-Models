@@ -14,6 +14,7 @@ import {
   Row,
   Col,
   message,
+  Slider,
 } from "antd";
 import { InboxOutlined } from "@ant-design/icons";
 import { Canvas } from "@react-three/fiber";
@@ -100,7 +101,6 @@ const ModelViewer = ({
           : [child.material];
 
         materialsArray.forEach((material) => {
-          
           if (materialSettings[material.uuid]) {
             const settings = materialSettings[material.uuid];
             if (settings.color) {
@@ -148,6 +148,7 @@ const ModelsModal = ({
   const [materials, setMaterials] = useState([]);
   const [selectedMaterial, setSelectedMaterial] = useState(null);
   const [materialSettings, setMaterialSettings] = useState({});
+  const [modelScale, setModelScale] = useState(1);
   const [plateSettings, setPlateSettings] = useState({
     front: {
       position: [0, 0.25, 3.04],
@@ -237,6 +238,7 @@ const ModelsModal = ({
     setCarFileUrl(null);
     setMaterials([]);
     setMaterialSettings({});
+    setModelScale(1);
   };
 
   const handleFinish = async (data) => {
@@ -315,56 +317,73 @@ const ModelsModal = ({
   const renderPlateSettings = (plateType) => (
     <div style={{ padding: 16 }}>
       <h4>Position</h4>
-      <Row gutter={16}>
-        {["x", "y", "z"].map((axis, i) => (
-          <Col span={8} key={axis}>
-            <InputNumber
-              value={plateSettings[plateType].position[i]}
-              onChange={(value) =>
-                updatePlateSettings(plateType, "position", i, value)
-              }
-              step={0.01}
-              style={{ width: "100%" }}
-              addonBefore={axis.toUpperCase()}
-            />
-          </Col>
-        ))}
-      </Row>
+      {["x", "y", "z"].map((axis, i) => (
+        <div key={axis} style={{ marginBottom: 16 }}>
+          <label>{axis.toUpperCase()}</label>
+          <Slider
+            min={-5}
+            max={5}
+            step={0.01}
+            value={plateSettings[plateType].position[i]}
+            onChange={(value) => updatePlateSettings(plateType, "position", i, value)}
+            tooltip={{ formatter: (value) => value?.toFixed(2) }}
+          />
+          <InputNumber
+            min={-5}
+            max={5}
+            step={0.01}
+            value={plateSettings[plateType].position[i]}
+            onChange={(value) => updatePlateSettings(plateType, "position", i, value)}
+            style={{ width: '100%', marginTop: 8 }}
+          />
+        </div>
+      ))}
 
-      <h4 style={{ marginTop: 16 }}>Rotation (radians)</h4>
-      <Row gutter={16}>
-        {["x", "y", "z"].map((axis, i) => (
-          <Col span={8} key={axis}>
-            <InputNumber
-              value={plateSettings[plateType].rotation[i]}
-              onChange={(value) =>
-                updatePlateSettings(plateType, "rotation", i, value)
-              }
-              step={0.01}
-              style={{ width: "100%" }}
-              addonBefore={axis.toUpperCase()}
-            />
-          </Col>
-        ))}
-      </Row>
+      <h4 style={{ marginTop: 24 }}>Rotation (radians)</h4>
+      {["x", "y", "z"].map((axis, i) => (
+        <div key={axis} style={{ marginBottom: 16 }}>
+          <label>{axis.toUpperCase()}</label>
+          <Slider
+            min={-Math.PI}
+            max={Math.PI}
+            step={0.01}
+            value={plateSettings[plateType].rotation[i]}
+            onChange={(value) => updatePlateSettings(plateType, "rotation", i, value)}
+            tooltip={{ formatter: (value) => value?.toFixed(2) }}
+          />
+          <InputNumber
+            min={-Math.PI}
+            max={Math.PI}
+            step={0.01}
+            value={plateSettings[plateType].rotation[i]}
+            onChange={(value) => updatePlateSettings(plateType, "rotation", i, value)}
+            style={{ width: '100%', marginTop: 8 }}
+          />
+        </div>
+      ))}
 
-      <h4 style={{ marginTop: 16 }}>Scale</h4>
-      <Row gutter={16}>
-        {["x", "y", "z"].map((axis, i) => (
-          <Col span={8} key={axis}>
-            <InputNumber
-              value={plateSettings[plateType].scale[i]}
-              onChange={(value) =>
-                updatePlateSettings(plateType, "scale", i, value)
-              }
-              step={0.01}
-              min={0.01}
-              style={{ width: "100%" }}
-              addonBefore={axis.toUpperCase()}
-            />
-          </Col>
-        ))}
-      </Row>
+      <h4 style={{ marginTop: 24 }}>Scale</h4>
+      {["x", "y", "z"].map((axis, i) => (
+        <div key={axis} style={{ marginBottom: 16 }}>
+          <label>{axis.toUpperCase()}</label>
+          <Slider
+            min={0.1}
+            max={2}
+            step={0.01}
+            value={plateSettings[plateType].scale[i]}
+            onChange={(value) => updatePlateSettings(plateType, "scale", i, value)}
+            tooltip={{ formatter: (value) => value?.toFixed(2) }}
+          />
+          <InputNumber
+            min={0.1}
+            max={2}
+            step={0.01}
+            value={plateSettings[plateType].scale[i]}
+            onChange={(value) => updatePlateSettings(plateType, "scale", i, value)}
+            style={{ width: '100%', marginTop: 8 }}
+          />
+        </div>
+      ))}
     </div>
   );
 
@@ -403,6 +422,20 @@ const ModelsModal = ({
               />
 
               <h4>Metalness</h4>
+              <Slider
+                min={0}
+                max={1}
+                step={0.01}
+                value={
+                  materialSettings[selectedMaterial]?.metalness ??
+                  materials.find((m) => m.uuid === selectedMaterial)?.metalness ??
+                  0
+                }
+                onChange={(value) =>
+                  updateMaterialProperty(selectedMaterial, "metalness", value)
+                }
+                tooltip={{ formatter: (value) => value?.toFixed(2) }}
+              />
               <InputNumber
                 min={0}
                 max={1}
@@ -415,10 +448,24 @@ const ModelsModal = ({
                 onChange={(value) =>
                   updateMaterialProperty(selectedMaterial, "metalness", value)
                 }
-                style={{ width: "100%", marginBottom: 16 }}
+                style={{ width: '100%', marginTop: 8 }}
               />
 
               <h4>Roughness</h4>
+              <Slider
+                min={0}
+                max={1}
+                step={0.01}
+                value={
+                  materialSettings[selectedMaterial]?.roughness ??
+                  materials.find((m) => m.uuid === selectedMaterial)?.roughness ??
+                  0.5
+                }
+                onChange={(value) =>
+                  updateMaterialProperty(selectedMaterial, "roughness", value)
+                }
+                tooltip={{ formatter: (value) => value?.toFixed(2) }}
+              />
               <InputNumber
                 min={0}
                 max={1}
@@ -431,7 +478,7 @@ const ModelsModal = ({
                 onChange={(value) =>
                   updateMaterialProperty(selectedMaterial, "roughness", value)
                 }
-                style={{ width: "100%" }}
+                style={{ width: '100%', marginTop: 8 }}
               />
             </div>
           )}
@@ -517,6 +564,29 @@ const ModelsModal = ({
               </Collapse>
             )}
 
+            <Collapse style={{ marginTop: "20px" }} defaultActiveKey={["1"]}>
+              <Panel header="Model Size" key="1">
+                <div style={{ padding: 16 }}>
+                  <Slider
+                    min={0.1}
+                    max={3}
+                    step={0.01}
+                    value={modelScale}
+                    onChange={setModelScale}
+                    tooltip={{ formatter: (value) => value?.toFixed(2) }}
+                  />
+                  <InputNumber
+                    min={0.1}
+                    max={3}
+                    step={0.01}
+                    value={modelScale}
+                    onChange={setModelScale}
+                    style={{ width: '100%', marginTop: 8 }}
+                  />
+                </div>
+              </Panel>
+            </Collapse>
+
             {materials.length > 0 && renderMaterialControls()}
           </Col>
 
@@ -540,7 +610,7 @@ const ModelsModal = ({
                   fileUrl={carFileUrl}
                   position={[0, 0, 0]}
                   rotation={[0, 0, 0]}
-                  scale={[1, 1, 1]}
+                  scale={[modelScale, modelScale, modelScale]}
                   materialSettings={materialSettings}
                   onMaterialsLoaded={setMaterials}
                 />
