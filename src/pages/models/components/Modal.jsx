@@ -1,3 +1,5 @@
+import React, { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 import {
   Button,
   Collapse,
@@ -6,37 +8,118 @@ import {
   Space,
   Tabs,
   Upload,
+  Form,
+  Input,
+  Select,
+  Row,
+  Col,
+  message,
 } from "antd";
-import { Form, Input, Select, Row, Col } from "antd";
-import { carsPatch, carsPost, categoriesList } from "../../../api/urls";
-import { useLoad, usePatchRequest, usePostRequest } from "../../../api/request";
-import { InboxOutlined, UploadOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
-import { message } from "antd";
+import { InboxOutlined } from "@ant-design/icons";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
-const { Option } = Select;
+import { useLoad, usePatchRequest, usePostRequest } from "../../../api/request";
+import { carsPost, categoriesList } from "../../../api/urls";
 
+const { Option } = Select;
 const { Dragger } = Upload;
 const { Panel } = Collapse;
 
-const ModelViewer = ({ fileUrl, position, rotation, scale }) => {
-  // Add proper null/undefined checks
-  if (!fileUrl || typeof fileUrl !== "string") return null;
-
-  // useGLTF now accepts a second parameter for GLTFLoader options
+const ModelViewer = ({
+  fileUrl,
+  position = [0, 0, 0],
+  rotation = [0, 0, 0],
+  scale = [1, 1, 1],
+  materialSettings = {},
+  onMaterialsLoaded,
+}) => {
   const { scene } = useGLTF(fileUrl, true);
+  const sceneRef = useRef();
+  
+  useEffect(() => {
+    if (!scene) return;
 
-  // Clone the scene to avoid modifying the original
-  const clonedScene = useMemo(() => {
     const clone = scene.clone();
     clone.position.set(...position);
     clone.rotation.set(...rotation);
     clone.scale.set(...scale);
-    return clone;
-  }, [scene, position, rotation, scale]);
 
-  return <primitive object={clonedScene} />;
+    // Collect materials
+    const materialsList = [];
+    clone.traverse((child) => {
+      if (child.material) {
+        const materialsArray = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+
+        materialsArray.forEach((material) => {
+          if (!materialsList.some((m) => m.uuid === material.uuid)) {
+            materialsList.push({
+              uuid: material.uuid,
+              name: material.name || "unnamed",
+              type: material.type,
+              isMeshStandardMaterial: material.isMeshStandardMaterial,
+              color: material.color.clone(),
+              map: material.map,
+              metalness: material.metalness,
+              roughness: material.roughness,
+            });
+          }
+        });
+      }
+    });
+
+    if (onMaterialsLoaded) {
+      onMaterialsLoaded(materialsList);
+    }
+    
+    sceneRef.current = clone;
+
+    return () => {
+      clone.traverse((child) => {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            material.dispose();
+          });
+        }
+      });
+    };
+  }, [scene, position.join(','), rotation.join(','), scale.join(',')]);
+
+  useEffect(() => {
+    if (!sceneRef.current) return;
+
+    sceneRef.current.traverse((child) => {
+      if (child.material) {
+        const materialsArray = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+
+        materialsArray.forEach((material) => {
+          
+          if (materialSettings[material.uuid]) {
+            const settings = materialSettings[material.uuid];
+            if (settings.color) {
+              material.color.copy(settings.color);
+            }
+            if (settings.metalness !== undefined) {
+              material.metalness = settings.metalness;
+            }
+            if (settings.roughness !== undefined) {
+              material.roughness = settings.roughness;
+            }
+            material.needsUpdate = true;
+          }
+        });
+      }
+    });
+  }, [materialSettings]);
+
+  return sceneRef.current ? <primitive object={sceneRef.current} /> : null;
 };
 
 const ModelsModal = ({
@@ -59,8 +142,12 @@ const ModelsModal = ({
   const [frontPlateFileUrl] = useState("/models/front_plate.glb");
   const [backPlateFileUrl] = useState("/models/back_plate.glb");
   const [activePlateTab, setActivePlateTab] = useState("front");
+  const [modelColor, setModelColor] = useState("");
   const [showPlates, setShowPlates] = useState(false);
-  const [carFileObject, setCarFileObject] = useState(null); // Separate state for the File object
+  const [carFileObject, setCarFileObject] = useState(null);
+  const [materials, setMaterials] = useState([]);
+  const [selectedMaterial, setSelectedMaterial] = useState(null);
+  const [materialSettings, setMaterialSettings] = useState({});
   const [plateSettings, setPlateSettings] = useState({
     front: {
       position: [0, 0.25, 3.04],
@@ -74,15 +161,8 @@ const ModelsModal = ({
     },
   });
 
-  useEffect(() => {
-    return () => {
-      // Clean up object URLs when component unmounts
-      if (carFileUrl) URL.revokeObjectURL(carFileUrl);
-    };
-  }, [carFileUrl]);
-
   const modelConfig = {
-    colorMeshes: ["TEX.005"],
+    colorMeshes: [modelColor],
     licensePlate: {
       front: {
         position: [0, 0.25, 3.04],
@@ -121,89 +201,29 @@ const ModelsModal = ({
   };
 
   const availableColors = [
-    {
-      id: "nardo-grey",
-      name: "Nardo Grey",
-      hex: "#808080",
-    },
-    {
-      id: "midnight-purple",
-      name: "Midnight Purple",
-      hex: "#2D1B4B",
-    },
-    {
-      id: "frozen-black",
-      name: "Frozen Black Metallic",
-      hex: "#1B1B1B",
-    },
-    {
-      id: "british-racing-green",
-      name: "British Racing Green",
-      hex: "#004225",
-    },
-    {
-      id: "tanzanite-blue",
-      name: "Tanzanite Blue Metallic",
-      hex: "#1F2C5C",
-    },
-    {
-      id: "sakhir-orange",
-      name: "Sakhir Orange Metallic",
-      hex: "#E25822",
-    },
-    {
-      id: "chalk-grey",
-      name: "Chalk Grey",
-      hex: "#D6D3D1",
-    },
-    {
-      id: "daytona-blue",
-      name: "Daytona Blue",
-      hex: "#0F4D92",
-    },
-    {
-      id: "carbon-black",
-      name: "Carbon Black Metallic",
-      hex: "#1C1E21",
-    },
-    {
-      id: "rosso-corsa",
-      name: "Rosso Corsa",
-      hex: "#D40000",
-    },
-    {
-      id: "sepang-bronze",
-      name: "Sepang Bronze Metallic",
-      hex: "#8B6C42",
-    },
-    {
-      id: "laguna-seca-blue",
-      name: "Laguna Seca Blue",
-      hex: "#4785B4",
-    },
-    {
-      id: "santorini-blue",
-      name: "Santorini Blue",
-      hex: "#2469AD",
-    },
-    {
-      id: "arctic-silver",
-      name: "Arctic Silver Metallic",
-      hex: "#D2D4D7",
-    },
-    {
-      id: "lava-orange",
-      name: "Lava Orange",
-      hex: "#E86C29",
-    },
+    { id: "nardo-grey", name: "Nardo Grey", hex: "#808080" },
+    { id: "midnight-purple", name: "Midnight Purple", hex: "#2D1B4B" },
+    { id: "frozen-black", name: "Frozen Black Metallic", hex: "#1B1B1B" },
+    { id: "british-racing-green", name: "British Racing Green", hex: "#004225" },
+    { id: "tanzanite-blue", name: "Tanzanite Blue Metallic", hex: "#1F2C5C" },
+    { id: "sakhir-orange", name: "Sakhir Orange Metallic", hex: "#E25822" },
+    { id: "chalk-grey", name: "Chalk Grey", hex: "#D6D3D1" },
+    { id: "daytona-blue", name: "Daytona Blue", hex: "#0F4D92" },
+    { id: "carbon-black", name: "Carbon Black Metallic", hex: "#1C1E21" },
+    { id: "rosso-corsa", name: "Rosso Corsa", hex: "#D40000" },
+    { id: "sepang-bronze", name: "Sepang Bronze Metallic", hex: "#8B6C42" },
+    { id: "laguna-seca-blue", name: "Laguna Seca Blue", hex: "#4785B4" },
+    { id: "santorini-blue", name: "Santorini Blue", hex: "#2469AD" },
+    { id: "arctic-silver", name: "Arctic Silver Metallic", hex: "#D2D4D7" },
+    { id: "lava-orange", name: "Lava Orange", hex: "#E86C29" },
   ];
 
   const carUploadProps = {
     accept: ".glb",
     beforeUpload: (file) => {
       const url = URL.createObjectURL(file);
-      setCarFileUrl(url); // Store URL string
-      setCarFileObject(file); // Store File object separately
+      setCarFileUrl(url);
+      setCarFileObject(file);
       setShowPlates(true);
       return false;
     },
@@ -215,32 +235,27 @@ const ModelsModal = ({
     setIsUpdate(null);
     form.resetFields();
     setCarFileUrl(null);
+    setMaterials([]);
+    setMaterialSettings({});
   };
 
   const handleFinish = async (data) => {
     const formData = new FormData();
-
-    // Append all form fields
     formData.append("name", data.name);
     formData.append("category", data.category);
-    formData.append("file", carFileUrl.file); // Append the actual File object
-    formData.append("photo", carFileUrl.file); // Append the actual File object
-
-    // Stringify JSON data
+    formData.append("file", carFileObject);
     formData.append("modelConfig", JSON.stringify(modelConfig));
     formData.append("availableColors", JSON.stringify(availableColors));
+    formData.append("materialSettings", JSON.stringify(materialSettings));
+    
 
     try {
       const { success } = isUpdate
         ? await patchRequest.request({
             url: carsPatch(isUpdate),
             data: formData,
-            // Don't set Content-Type header manually - the browser will set it with the correct boundary
           })
-        : await postRequest.request({
-            data: formData,
-            // Don't set Content-Type header manually
-          });
+        : await postRequest.request({ data: formData });
 
       if (success) {
         reload();
@@ -253,12 +268,8 @@ const ModelsModal = ({
         error.response?.data?.message || "Upload failed. Please try again."
       );
     }
-
-    // To inspect FormData contents:
-    for (let [key, value] of formData.entries()) {
-      console.log(key, value);
-    }
   };
+
   const handleSubmit = () => {
     form.submit();
   };
@@ -275,6 +286,30 @@ const ModelsModal = ({
         ],
       },
     }));
+  };
+
+  const updateMaterialProperty = (materialId, property, value) => {
+    setMaterialSettings((prev) => ({
+      ...prev,
+      [materialId]: {
+        ...prev[materialId],
+        [property]: value,
+      },
+    }));
+  };
+
+  const getColorValue = (materialId) => {
+    const currentColor = materialSettings[materialId]?.color || 
+                        materials.find(m => m.uuid === materialId)?.color;
+    return currentColor ? `#${currentColor.getHexString()}` : '#ffffff';
+  };
+
+  const handleMaterialSelect = (uuid) => {
+    const selected = materials.find(m => m.uuid === uuid);
+    setSelectedMaterial(uuid);
+    if (selected) {
+      setModelColor(selected.name);
+    }
   };
 
   const renderPlateSettings = (plateType) => (
@@ -333,171 +368,206 @@ const ModelsModal = ({
     </div>
   );
 
+  const renderMaterialControls = () => (
+    <Collapse style={{ marginTop: "20px" }} defaultActiveKey={["1"]}>
+      <Panel header="Material Settings" key="1">
+        <div style={{ padding: 16 }}>
+          <Select
+            style={{ width: "100%", marginBottom: 16 }}
+            placeholder="Select a material to edit"
+            onChange={handleMaterialSelect}
+            value={selectedMaterial}
+          >
+            {materials.map((material) => (
+              <Option key={material.uuid} value={material.uuid}>
+                {material.name}
+              </Option>
+            ))}
+          </Select>
+
+          {selectedMaterial && (
+            <div>
+              <h4>Selected Material: {modelColor}</h4>
+              <h4>Color</h4>
+              <input
+                type="color"
+                value={getColorValue(selectedMaterial)}
+                onChange={(e) =>
+                  updateMaterialProperty(
+                    selectedMaterial,
+                    "color",
+                    new THREE.Color(e.target.value)
+                  )
+                }
+                style={{ width: "100%", marginBottom: 16 }}
+              />
+
+              <h4>Metalness</h4>
+              <InputNumber
+                min={0}
+                max={1}
+                step={0.01}
+                value={
+                  materialSettings[selectedMaterial]?.metalness ??
+                  materials.find((m) => m.uuid === selectedMaterial)?.metalness ??
+                  0
+                }
+                onChange={(value) =>
+                  updateMaterialProperty(selectedMaterial, "metalness", value)
+                }
+                style={{ width: "100%", marginBottom: 16 }}
+              />
+
+              <h4>Roughness</h4>
+              <InputNumber
+                min={0}
+                max={1}
+                step={0.01}
+                value={
+                  materialSettings[selectedMaterial]?.roughness ??
+                  materials.find((m) => m.uuid === selectedMaterial)?.roughness ??
+                  0.5
+                }
+                onChange={(value) =>
+                  updateMaterialProperty(selectedMaterial, "roughness", value)
+                }
+                style={{ width: "100%" }}
+              />
+            </div>
+          )}
+        </div>
+      </Panel>
+    </Collapse>
+  );
+
   return (
-    <>
-      <Drawer
-        style={{ width: "100%" }}
-        title={`Model Add`}
-        placement="right"
-        size="large"
-        width={"100%"}
-        closable={false}
-        open={open}
-        extra={
-          <Space>
-            <Button onClick={handleCancel}>Cancel</Button>
-            <Button type="primary" onClick={handleSubmit}>
-              OK
-            </Button>
-          </Space>
-        }
-      >
-        <Form form={form} layout="vertical" onFinish={handleFinish}>
-          <div style={{ display: "flex", gap: 20 }}>
-            <Row gutter={[16, 16]}>{}</Row>
+    <Drawer
+      title={`${isUpdate ? "Edit" : "Add"} Model`}
+      placement="right"
+      size="large"
+      width={"100%"}
+      closable={false}
+      open={open}
+      extra={
+        <Space>
+          <Button onClick={handleCancel}>Cancel</Button>
+          <Button type="primary" onClick={handleSubmit}>
+            OK
+          </Button>
+        </Space>
+      }
+    >
+      <Form form={form} layout="vertical" onFinish={handleFinish}>
+        <Row gutter={[16, 16]}>
+          <Col span={10}>
+            <Form.Item
+              name="name"
+              label="Car Name"
+              rules={[{ required: true, message: "Please enter the car name" }]}
+            >
+              <Input placeholder="Enter car name" />
+            </Form.Item>
 
-            <Row gutter={[16, 16]} layout="vertical">
-              <Col span={12}>
-                <Form.Item
-                  name="name"
-                  label="Car Name"
-                  rules={[
-                    { required: true, message: "Please enter the car name" },
-                  ]}
-                >
-                  <Input placeholder="Enter car name" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="category"
-                  label="Category"
-                  rules={[
-                    { required: true, message: "Please select a category" },
-                  ]}
-                >
-                  <Select
-                    placeholder="Select a category"
-                    loading={CategoriesLoading}
+            <Form.Item
+              name="category"
+              label="Category"
+              rules={[{ required: true, message: "Please select a category" }]}
+            >
+              <Select
+                placeholder="Select a category"
+                loading={CategoriesLoading}
+              >
+                {categories?.map((category) => (
+                  <Option key={category.id} value={category.id}>
+                    {category.name}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+
+            <Form.Item
+              name="file"
+              label="Upload 3D Model"
+              rules={[{ required: true, message: "Please upload a 3D model" }]}
+            >
+              <Dragger {...carUploadProps} style={{ marginBottom: 16 }}>
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined />
+                </p>
+                <p className="ant-upload-text">Upload Car Model (.glb)</p>
+              </Dragger>
+            </Form.Item>
+
+            {showPlates && (
+              <Collapse defaultActiveKey={["1"]}>
+                <Panel header="Number Plate Settings" key="1">
+                  <Tabs
+                    style={{ marginTop: 10 }}
+                    activeKey={activePlateTab}
+                    onChange={setActivePlateTab}
                   >
-                    {categories?.map((category) => (
-                      <Option key={category.id} value={category.id}>
-                        {category.name}
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="file"
-                  label="Upload 3D Model"
-                  rules={[
-                    {
-                      required: true,
-                      message: "Please upload a 3D model",
-                    },
-                  ]}
-                >
-                  <Dragger {...carUploadProps} style={{ marginBottom: 16 }}>
-                    <p className="ant-upload-drag-icon">
-                      <InboxOutlined />
-                    </p>
-                    <p className="ant-upload-text">Upload Car Model (.glb)</p>
-                  </Dragger>
-                </Form.Item>
-              </Col>
+                    <Tabs.TabPane tab="Front Plate" key="front">
+                      {renderPlateSettings("front")}
+                    </Tabs.TabPane>
+                    <Tabs.TabPane tab="Back Plate" key="back">
+                      {renderPlateSettings("back")}
+                    </Tabs.TabPane>
+                  </Tabs>
+                </Panel>
+              </Collapse>
+            )}
 
-              <Col span={16}>
-                <Canvas
-                  style={{
-                    width: "100%",
-                    height: "500px",
-                    border: "1px solid #d9d9d9",
-                    background: "#f0f0f0",
-                  }}
-                >
-                  <ambientLight intensity={0.5} />
-                  <directionalLight position={[2, 2, 2]} />
-                  {carFileUrl && (
-                    <ModelViewer
-                      fileUrl={carFileUrl}
-                      position={[0, 0, 0]}
-                      rotation={[0, 0, 0]}
-                      scale={[1, 1, 1]}
-                    />
-                  )}
-                  {showPlates && (
-                    <>
-                      <ModelViewer
-                        fileUrl={frontPlateFileUrl}
-                        position={plateSettings.front.position}
-                        rotation={plateSettings.front.rotation}
-                        scale={plateSettings.front.scale}
-                      />
-                      <ModelViewer
-                        fileUrl={backPlateFileUrl}
-                        position={plateSettings.back.position}
-                        rotation={plateSettings.back.rotation}
-                        scale={plateSettings.back.scale}
-                      />
-                    </>
-                  )}
-                  <OrbitControls />
-                </Canvas>
-                {!carFileUrl && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                      transform: "translate(-50%, -50%)",
-                      textAlign: "center",
-                      color: "#999",
-                      width: "100%",
-                    }}
-                  >
-                    <p>Upload a car model to begin</p>
-                  </div>
-                )}
-              </Col>
+            {materials.length > 0 && renderMaterialControls()}
+          </Col>
 
-              <Col span={12}>
-                {showPlates && (
-                  <Collapse
-                    defaultActiveKey={["1"]}
-                    items={[
-                      {
-                        key: "1",
-                        label: "Number Plate Settings",
-                        children: (
-                          <Tabs
-                            activeKey={activePlateTab}
-                            onChange={setActivePlateTab}
-                            items={[
-                              {
-                                key: "front",
-                                label: "Front Plate",
-                                children: renderPlateSettings("front"),
-                              },
-                              {
-                                key: "back",
-                                label: "Back Plate",
-                                children: renderPlateSettings("back"),
-                              },
-                            ]}
-                          />
-                        ),
-                      },
-                    ]}
+          <Col span={14}>
+            <Canvas
+              style={{
+                position: "sticky",
+                top: 0,
+                width: "100%",
+                height: "500px",
+                border: "1px solid #d9d9d9",
+                background: "#f0f0f0",
+              }}
+            >
+              <ambientLight intensity={0.5} />
+              <directionalLight position={[2, 2, 2]} />
+              <OrbitControls />
+
+              {carFileUrl && (
+                <ModelViewer
+                  fileUrl={carFileUrl}
+                  position={[0, 0, 0]}
+                  rotation={[0, 0, 0]}
+                  scale={[1, 1, 1]}
+                  materialSettings={materialSettings}
+                  onMaterialsLoaded={setMaterials}
+                />
+              )}
+
+              {showPlates && (
+                <>
+                  <ModelViewer
+                    fileUrl={frontPlateFileUrl}
+                    position={plateSettings.front.position}
+                    rotation={plateSettings.front.rotation}
+                    scale={plateSettings.front.scale}
                   />
-                )}
-              </Col>
-            </Row>
-          </div>
-        </Form>
-      </Drawer>
-    </>
+                  <ModelViewer
+                    fileUrl={backPlateFileUrl}
+                    position={plateSettings.back.position}
+                    rotation={plateSettings.back.rotation}
+                    scale={plateSettings.back.scale}
+                  />
+                </>
+              )}
+            </Canvas>
+          </Col>
+        </Row>
+      </Form>
+    </Drawer>
   );
 };
+
 export default ModelsModal;
