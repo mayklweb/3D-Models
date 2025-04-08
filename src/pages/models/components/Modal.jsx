@@ -20,7 +20,7 @@ import { InboxOutlined } from "@ant-design/icons";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import { useLoad, usePatchRequest, usePostRequest } from "../../../api/request";
-import { carsPost, categoriesList } from "../../../api/urls";
+import { carsPost, categoriesList, carsPatch } from "../../../api/urls";
 
 const { Option } = Select;
 const { Dragger } = Upload;
@@ -36,7 +36,7 @@ const ModelViewer = ({
 }) => {
   const { scene } = useGLTF(fileUrl, true);
   const sceneRef = useRef();
-  
+
   useEffect(() => {
     if (!scene) return;
 
@@ -73,7 +73,7 @@ const ModelViewer = ({
     if (onMaterialsLoaded) {
       onMaterialsLoaded(materialsList);
     }
-    
+
     sceneRef.current = clone;
 
     return () => {
@@ -82,14 +82,16 @@ const ModelViewer = ({
           child.geometry.dispose();
         }
         if (child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material];
           materials.forEach((material) => {
             material.dispose();
           });
         }
       });
     };
-  }, [scene, position.join(','), rotation.join(','), scale.join(',')]);
+  }, [scene, position.join(","), rotation.join(","), scale.join(",")]);
 
   useEffect(() => {
     if (!sceneRef.current) return;
@@ -162,50 +164,24 @@ const ModelsModal = ({
     },
   });
 
-  const modelConfig = {
+  const [modelConfig, setModelConfig] = useState({
     colorMeshes: [modelColor],
     licensePlate: {
-      front: {
-        position: [0, 0.25, 3.04],
-        rotation: [-1.57079632679, 3.14159265359, 3.14159265359],
-        scale: [0.1, 0.1, 0.1],
-        textPosition: {
-          main: [-0.125, 0.235, 3.05],
-          region: [-0.21, 0.235, 3.05],
-        },
-        textScale: {
-          main: [1.3, 1.2, 1],
-          region: [1, 1.1, 1],
-        },
-        textSize: 0.031,
-        letterSpacing: 0.01,
-      },
-      back: {
-        position: [0, 0.6, -0.8],
-        rotation: [-1.57079632679, 3.14159265359, 0],
-        scale: [0.09, 0.1, 0.1],
-        textPosition: {
-          main: [0.11, 0.59, -0.8],
-          region: [0.195, 0.59, -0.8],
-        },
-        textScale: {
-          main: [1.5, 1.4, 1],
-          region: [1.5, 1.2, 1],
-        },
-        textSize: 0.023,
-        letterSpacing: {
-          main: 0.009,
-          region: 0.005,
-        },
-      },
+      front: { ...plateSettings.front },
+      back: { ...plateSettings.back },
     },
-  };
+    scale: 1, // Add scale to modelConfig
+  });
 
   const availableColors = [
     { id: "nardo-grey", name: "Nardo Grey", hex: "#808080" },
     { id: "midnight-purple", name: "Midnight Purple", hex: "#2D1B4B" },
     { id: "frozen-black", name: "Frozen Black Metallic", hex: "#1B1B1B" },
-    { id: "british-racing-green", name: "British Racing Green", hex: "#004225" },
+    {
+      id: "british-racing-green",
+      name: "British Racing Green",
+      hex: "#004225",
+    },
     { id: "tanzanite-blue", name: "Tanzanite Blue Metallic", hex: "#1F2C5C" },
     { id: "sakhir-orange", name: "Sakhir Orange Metallic", hex: "#E25822" },
     { id: "chalk-grey", name: "Chalk Grey", hex: "#D6D3D1" },
@@ -218,6 +194,14 @@ const ModelsModal = ({
     { id: "arctic-silver", name: "Arctic Silver Metallic", hex: "#D2D4D7" },
     { id: "lava-orange", name: "Lava Orange", hex: "#E86C29" },
   ];
+
+  // Update modelConfig when modelScale changes
+  useEffect(() => {
+    setModelConfig(prev => ({
+      ...prev,
+      scale: modelScale
+    }));
+  }, [modelScale]);
 
   const carUploadProps = {
     accept: ".glb",
@@ -248,8 +232,6 @@ const ModelsModal = ({
     formData.append("file", carFileObject);
     formData.append("modelConfig", JSON.stringify(modelConfig));
     formData.append("availableColors", JSON.stringify(availableColors));
-    formData.append("materialSettings", JSON.stringify(materialSettings));
-    
 
     try {
       const { success } = isUpdate
@@ -277,17 +259,30 @@ const ModelsModal = ({
   };
 
   const updatePlateSettings = (plateType, field, axis, value) => {
-    setPlateSettings((prev) => ({
-      ...prev,
-      [plateType]: {
-        ...prev[plateType],
-        [field]: [
-          ...prev[plateType][field].slice(0, axis),
-          value,
-          ...prev[plateType][field].slice(axis + 1),
-        ],
-      },
-    }));
+    setPlateSettings((prev) => {
+      const newSettings = {
+        ...prev,
+        [plateType]: {
+          ...prev[plateType],
+          [field]: [
+            ...prev[plateType][field].slice(0, axis),
+            value,
+            ...prev[plateType][field].slice(axis + 1),
+          ],
+        },
+      };
+
+      // Update modelConfig with the new plate settings
+      setModelConfig((prevConfig) => ({
+        ...prevConfig,
+        licensePlate: {
+          front: { ...newSettings.front },
+          back: { ...newSettings.back },
+        },
+      }));
+
+      return newSettings;
+    });
   };
 
   const updateMaterialProperty = (materialId, property, value) => {
@@ -298,16 +293,27 @@ const ModelsModal = ({
         [property]: value,
       },
     }));
+
+    // If updating color, also update the modelConfig
+    if (property === "color") {
+      const colorName = materials.find((m) => m.uuid === materialId)?.name || "";
+      setModelColor(colorName);
+      setModelConfig((prev) => ({
+        ...prev,
+        colorMeshes: [colorName],
+      }));
+    }
   };
 
   const getColorValue = (materialId) => {
-    const currentColor = materialSettings[materialId]?.color || 
-                        materials.find(m => m.uuid === materialId)?.color;
-    return currentColor ? `#${currentColor.getHexString()}` : '#ffffff';
+    const currentColor =
+      materialSettings[materialId]?.color ||
+      materials.find((m) => m.uuid === materialId)?.color;
+    return currentColor ? `#${currentColor.getHexString()}` : "#ffffff";
   };
 
   const handleMaterialSelect = (uuid) => {
-    const selected = materials.find(m => m.uuid === uuid);
+    const selected = materials.find((m) => m.uuid === uuid);
     setSelectedMaterial(uuid);
     if (selected) {
       setModelColor(selected.name);
@@ -325,7 +331,9 @@ const ModelsModal = ({
             max={5}
             step={0.01}
             value={plateSettings[plateType].position[i]}
-            onChange={(value) => updatePlateSettings(plateType, "position", i, value)}
+            onChange={(value) =>
+              updatePlateSettings(plateType, "position", i, value)
+            }
             tooltip={{ formatter: (value) => value?.toFixed(2) }}
           />
           <InputNumber
@@ -333,8 +341,10 @@ const ModelsModal = ({
             max={5}
             step={0.01}
             value={plateSettings[plateType].position[i]}
-            onChange={(value) => updatePlateSettings(plateType, "position", i, value)}
-            style={{ width: '100%', marginTop: 8 }}
+            onChange={(value) =>
+              updatePlateSettings(plateType, "position", i, value)
+            }
+            style={{ width: "100%", marginTop: 8 }}
           />
         </div>
       ))}
@@ -348,7 +358,9 @@ const ModelsModal = ({
             max={Math.PI}
             step={0.01}
             value={plateSettings[plateType].rotation[i]}
-            onChange={(value) => updatePlateSettings(plateType, "rotation", i, value)}
+            onChange={(value) =>
+              updatePlateSettings(plateType, "rotation", i, value)
+            }
             tooltip={{ formatter: (value) => value?.toFixed(2) }}
           />
           <InputNumber
@@ -356,8 +368,10 @@ const ModelsModal = ({
             max={Math.PI}
             step={0.01}
             value={plateSettings[plateType].rotation[i]}
-            onChange={(value) => updatePlateSettings(plateType, "rotation", i, value)}
-            style={{ width: '100%', marginTop: 8 }}
+            onChange={(value) =>
+              updatePlateSettings(plateType, "rotation", i, value)
+            }
+            style={{ width: "100%", marginTop: 8 }}
           />
         </div>
       ))}
@@ -371,7 +385,9 @@ const ModelsModal = ({
             max={2}
             step={0.01}
             value={plateSettings[plateType].scale[i]}
-            onChange={(value) => updatePlateSettings(plateType, "scale", i, value)}
+            onChange={(value) =>
+              updatePlateSettings(plateType, "scale", i, value)
+            }
             tooltip={{ formatter: (value) => value?.toFixed(2) }}
           />
           <InputNumber
@@ -379,8 +395,10 @@ const ModelsModal = ({
             max={2}
             step={0.01}
             value={plateSettings[plateType].scale[i]}
-            onChange={(value) => updatePlateSettings(plateType, "scale", i, value)}
-            style={{ width: '100%', marginTop: 8 }}
+            onChange={(value) =>
+              updatePlateSettings(plateType, "scale", i, value)
+            }
+            style={{ width: "100%", marginTop: 8 }}
           />
         </div>
       ))}
@@ -428,7 +446,8 @@ const ModelsModal = ({
                 step={0.01}
                 value={
                   materialSettings[selectedMaterial]?.metalness ??
-                  materials.find((m) => m.uuid === selectedMaterial)?.metalness ??
+                  materials.find((m) => m.uuid === selectedMaterial)
+                    ?.metalness ??
                   0
                 }
                 onChange={(value) =>
@@ -442,13 +461,14 @@ const ModelsModal = ({
                 step={0.01}
                 value={
                   materialSettings[selectedMaterial]?.metalness ??
-                  materials.find((m) => m.uuid === selectedMaterial)?.metalness ??
+                  materials.find((m) => m.uuid === selectedMaterial)
+                    ?.metalness ??
                   0
                 }
                 onChange={(value) =>
                   updateMaterialProperty(selectedMaterial, "metalness", value)
                 }
-                style={{ width: '100%', marginTop: 8 }}
+                style={{ width: "100%", marginTop: 8 }}
               />
 
               <h4>Roughness</h4>
@@ -458,7 +478,8 @@ const ModelsModal = ({
                 step={0.01}
                 value={
                   materialSettings[selectedMaterial]?.roughness ??
-                  materials.find((m) => m.uuid === selectedMaterial)?.roughness ??
+                  materials.find((m) => m.uuid === selectedMaterial)
+                    ?.roughness ??
                   0.5
                 }
                 onChange={(value) =>
@@ -472,13 +493,14 @@ const ModelsModal = ({
                 step={0.01}
                 value={
                   materialSettings[selectedMaterial]?.roughness ??
-                  materials.find((m) => m.uuid === selectedMaterial)?.roughness ??
+                  materials.find((m) => m.uuid === selectedMaterial)
+                    ?.roughness ??
                   0.5
                 }
                 onChange={(value) =>
                   updateMaterialProperty(selectedMaterial, "roughness", value)
                 }
-                style={{ width: '100%', marginTop: 8 }}
+                style={{ width: "100%", marginTop: 8 }}
               />
             </div>
           )}
@@ -581,7 +603,7 @@ const ModelsModal = ({
                     step={0.01}
                     value={modelScale}
                     onChange={setModelScale}
-                    style={{ width: '100%', marginTop: 8 }}
+                    style={{ width: "100%", marginTop: 8 }}
                   />
                 </div>
               </Panel>
