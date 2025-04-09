@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import * as THREE from "three";
 import {
   Button,
@@ -15,6 +15,7 @@ import {
   Col,
   message,
   Slider,
+  Switch,
 } from "antd";
 import { InboxOutlined } from "@ant-design/icons";
 import { Canvas } from "@react-three/fiber";
@@ -45,7 +46,6 @@ const ModelViewer = ({
     clone.rotation.set(...rotation);
     clone.scale.set(...scale);
 
-    // Collect materials
     const materialsList = [];
     clone.traverse((child) => {
       if (child.material) {
@@ -78,16 +78,12 @@ const ModelViewer = ({
 
     return () => {
       clone.traverse((child) => {
-        if (child.geometry) {
-          child.geometry.dispose();
-        }
+        if (child.geometry) child.geometry.dispose();
         if (child.material) {
           const materials = Array.isArray(child.material)
             ? child.material
             : [child.material];
-          materials.forEach((material) => {
-            material.dispose();
-          });
+          materials.forEach((material) => material.dispose());
         }
       });
     };
@@ -105,21 +101,46 @@ const ModelViewer = ({
         materialsArray.forEach((material) => {
           if (materialSettings[material.uuid]) {
             const settings = materialSettings[material.uuid];
-            if (settings.color) {
-              material.color.copy(settings.color);
-            }
-            if (settings.metalness !== undefined) {
+            if (settings.color) material.color.copy(settings.color);
+            if (settings.metalness !== undefined)
               material.metalness = settings.metalness;
-            }
-            if (settings.roughness !== undefined) {
+            if (settings.roughness !== undefined)
               material.roughness = settings.roughness;
-            }
             material.needsUpdate = true;
           }
         });
       }
     });
   }, [materialSettings]);
+
+  return sceneRef.current ? <primitive object={sceneRef.current} /> : null;
+};
+
+const PlateViewer = ({ fileUrl, position, rotation, scale }) => {
+  const { scene } = useGLTF(fileUrl, true);
+  const sceneRef = useRef();
+
+  useEffect(() => {
+    if (!scene) return;
+
+    const clone = scene.clone();
+    clone.position.set(...position);
+    clone.rotation.set(...rotation);
+    clone.scale.set(...scale);
+    sceneRef.current = clone;
+
+    return () => {
+      clone.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material];
+          materials.forEach((material) => material.dispose());
+        }
+      });
+    };
+  }, [scene, position, rotation, scale]);
 
   return sceneRef.current ? <primitive object={sceneRef.current} /> : null;
 };
@@ -151,37 +172,59 @@ const ModelsModal = ({
   const [selectedMaterial, setSelectedMaterial] = useState(null);
   const [materialSettings, setMaterialSettings] = useState({});
   const [modelScale, setModelScale] = useState(1);
+  console.log(modelScale);
+  
   const [plateSettings, setPlateSettings] = useState({
     front: {
-      position: [0, 0.25, 3.04],
+      position: [0, 0.5, 2.5],
       rotation: [0, 0, 0],
-      scale: [0.8, 0.8, 0.8],
+      scale: [1, 1, 1],
+      textPosition: {
+        main: [-0.125, 0.235, 3.05],
+        region: [-0.21, 0.235, 3.05],
+      },
+      textScale: {
+        main: [1.3, 1.2, 1],
+        region: [1, 1.1, 1],
+      },
+      textSize: 0.031,
+      letterSpacing: 0.01,
     },
     back: {
-      position: [0, 0.3, -2.5],
+      position: [0, 0.5, -2.5],
       rotation: [0, Math.PI, 0],
-      scale: [0.8, 0.8, 0.8],
+      scale: [1, 1, 1],
+      textPosition: {
+        main: [0.11, 0.59, -0.8],
+        region: [0.195, 0.59, -0.8],
+      },
+      textScale: {
+        main: [1.5, 1.4, 1],
+        region: [1.5, 1.2, 1],
+      },
+      textSize: 0.023,
+      letterSpacing: {
+        main: 0.009,
+        region: 0.005,
+      },
     },
   });
 
-  const [modelConfig, setModelConfig] = useState({
+  // Create memoized modelConfig that updates when dependencies change
+  const modelConfig = useMemo(() => ({
     colorMeshes: [modelColor],
     licensePlate: {
       front: { ...plateSettings.front },
       back: { ...plateSettings.back },
     },
-    scale: 1, // Add scale to modelConfig
-  });
+    scale: modelScale,
+  }), [modelColor, plateSettings, modelScale]);
 
   const availableColors = [
     { id: "nardo-grey", name: "Nardo Grey", hex: "#808080" },
     { id: "midnight-purple", name: "Midnight Purple", hex: "#2D1B4B" },
     { id: "frozen-black", name: "Frozen Black Metallic", hex: "#1B1B1B" },
-    {
-      id: "british-racing-green",
-      name: "British Racing Green",
-      hex: "#004225",
-    },
+    { id: "british-racing-green", name: "British Racing Green", hex: "#004225" },
     { id: "tanzanite-blue", name: "Tanzanite Blue Metallic", hex: "#1F2C5C" },
     { id: "sakhir-orange", name: "Sakhir Orange Metallic", hex: "#E25822" },
     { id: "chalk-grey", name: "Chalk Grey", hex: "#D6D3D1" },
@@ -195,14 +238,6 @@ const ModelsModal = ({
     { id: "lava-orange", name: "Lava Orange", hex: "#E86C29" },
   ];
 
-  // Update modelConfig when modelScale changes
-  useEffect(() => {
-    setModelConfig(prev => ({
-      ...prev,
-      scale: modelScale
-    }));
-  }, [modelScale]);
-
   const carUploadProps = {
     accept: ".glb",
     beforeUpload: (file) => {
@@ -215,6 +250,99 @@ const ModelsModal = ({
     showUploadList: false,
   };
 
+  // Initialize form with API data when in edit mode
+  useEffect(() => {
+    if (isUpdate) {
+      form.setFieldsValue({
+        name: isUpdate.name,
+        category: isUpdate.category,
+      });
+
+      setModelScale(isUpdate.modelConfig?.scale || 1);
+      
+      setPlateSettings({
+        front: {
+          position: isUpdate.modelConfig?.licensePlate?.front?.position || [0, 0.5, 2.5],
+          rotation: isUpdate.modelConfig?.licensePlate?.front?.rotation || [0, 0, 0],
+          scale: isUpdate.modelConfig?.licensePlate?.front?.scale || [1, 1, 1],
+          textPosition: isUpdate.modelConfig?.licensePlate?.front?.textPosition || {
+            main: [-0.125, 0.235, 3.05],
+            region: [-0.21, 0.235, 3.05],
+          },
+          textScale: isUpdate.modelConfig?.licensePlate?.front?.textScale || {
+            main: [1.3, 1.2, 1],
+            region: [1, 1.1, 1],
+          },
+          textSize: isUpdate.modelConfig?.licensePlate?.front?.textSize || 0.031,
+          letterSpacing: isUpdate.modelConfig?.licensePlate?.front?.letterSpacing || 0.01,
+        },
+        back: {
+          position: isUpdate.modelConfig?.licensePlate?.back?.position || [0, 0.5, -2.5],
+          rotation: isUpdate.modelConfig?.licensePlate?.back?.rotation || [0, Math.PI, 0],
+          scale: isUpdate.modelConfig?.licensePlate?.back?.scale || [1, 1, 1],
+          textPosition: isUpdate.modelConfig?.licensePlate?.back?.textPosition || {
+            main: [0.11, 0.59, -0.8],
+            region: [0.195, 0.59, -0.8],
+          },
+          textScale: isUpdate.modelConfig?.licensePlate?.back?.textScale || {
+            main: [1.5, 1.4, 1],
+            region: [1.5, 1.2, 1],
+          },
+          textSize: isUpdate.modelConfig?.licensePlate?.back?.textSize || 0.023,
+          letterSpacing: isUpdate.modelConfig?.licensePlate?.back?.letterSpacing || {
+            main: 0.009,
+            region: 0.005,
+          },
+        },
+      });
+
+      if (isUpdate.modelUrl) {
+        setCarFileUrl(isUpdate.modelUrl);
+        setShowPlates(true);
+      }
+    } else {
+      form.resetFields();
+      setModelScale(1);
+      setPlateSettings({
+        front: {
+          position: [0, 0.5, 2.5],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+          textPosition: {
+            main: [-0.125, 0.235, 3.05],
+            region: [-0.21, 0.235, 3.05],
+          },
+          textScale: {
+            main: [1.3, 1.2, 1],
+            region: [1, 1.1, 1],
+          },
+          textSize: 0.031,
+          letterSpacing: 0.01,
+        },
+        back: {
+          position: [0, 0.5, -2.5],
+          rotation: [0, Math.PI, 0],
+          scale: [1, 1, 1],
+          textPosition: {
+            main: [0.11, 0.59, -0.8],
+            region: [0.195, 0.59, -0.8],
+          },
+          textScale: {
+            main: [1.5, 1.4, 1],
+            region: [1.5, 1.2, 1],
+          },
+          textSize: 0.023,
+          letterSpacing: {
+            main: 0.009,
+            region: 0.005,
+          },
+        },
+      });
+      setCarFileUrl(null);
+      setShowPlates(false);
+    }
+  }, [isUpdate, form]);
+
   const handleCancel = () => {
     setOpen(false);
     setIsUpdate(null);
@@ -223,13 +351,50 @@ const ModelsModal = ({
     setMaterials([]);
     setMaterialSettings({});
     setModelScale(1);
+    setPlateSettings({
+      front: {
+        position: [0, 0.5, 2.5],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+        textPosition: {
+          main: [-0.125, 0.235, 3.05],
+          region: [-0.21, 0.235, 3.05],
+        },
+        textScale: {
+          main: [1.3, 1.2, 1],
+          region: [1, 1.1, 1],
+        },
+        textSize: 0.031,
+        letterSpacing: 0.01,
+      },
+      back: {
+        position: [0, 0.5, -2.5],
+        rotation: [0, Math.PI, 0],
+        scale: [1, 1, 1],
+        textPosition: {
+          main: [0.11, 0.59, -0.8],
+          region: [0.195, 0.59, -0.8],
+        },
+        textScale: {
+          main: [1.5, 1.4, 1],
+          region: [1.5, 1.2, 1],
+        },
+        textSize: 0.023,
+        letterSpacing: {
+          main: 0.009,
+          region: 0.005,
+        },
+      },
+    });
   };
 
   const handleFinish = async (data) => {
     const formData = new FormData();
     formData.append("name", data.name);
     formData.append("category", data.category);
-    formData.append("file", carFileObject);
+    if (carFileObject) {
+      formData.append("file", carFileObject);
+    }
     formData.append("modelConfig", JSON.stringify(modelConfig));
     formData.append("availableColors", JSON.stringify(availableColors));
 
@@ -259,30 +424,17 @@ const ModelsModal = ({
   };
 
   const updatePlateSettings = (plateType, field, axis, value) => {
-    setPlateSettings((prev) => {
-      const newSettings = {
-        ...prev,
-        [plateType]: {
-          ...prev[plateType],
-          [field]: [
-            ...prev[plateType][field].slice(0, axis),
-            value,
-            ...prev[plateType][field].slice(axis + 1),
-          ],
-        },
-      };
-
-      // Update modelConfig with the new plate settings
-      setModelConfig((prevConfig) => ({
-        ...prevConfig,
-        licensePlate: {
-          front: { ...newSettings.front },
-          back: { ...newSettings.back },
-        },
-      }));
-
-      return newSettings;
-    });
+    setPlateSettings((prev) => ({
+      ...prev,
+      [plateType]: {
+        ...prev[plateType],
+        [field]: [
+          ...prev[plateType][field].slice(0, axis),
+          value,
+          ...prev[plateType][field].slice(axis + 1),
+        ],
+      },
+    }));
   };
 
   const updateMaterialProperty = (materialId, property, value) => {
@@ -293,16 +445,6 @@ const ModelsModal = ({
         [property]: value,
       },
     }));
-
-    // If updating color, also update the modelConfig
-    if (property === "color") {
-      const colorName = materials.find((m) => m.uuid === materialId)?.name || "";
-      setModelColor(colorName);
-      setModelConfig((prev) => ({
-        ...prev,
-        colorMeshes: [colorName],
-      }));
-    }
   };
 
   const getColorValue = (materialId) => {
@@ -557,7 +699,9 @@ const ModelsModal = ({
             <Form.Item
               name="file"
               label="Upload 3D Model"
-              rules={[{ required: true, message: "Please upload a 3D model" }]}
+              rules={[
+                { required: !isUpdate, message: "Please upload a 3D model" },
+              ]}
             >
               <Dragger {...carUploadProps} style={{ marginBottom: 16 }}>
                 <p className="ant-upload-drag-icon">
@@ -565,6 +709,13 @@ const ModelsModal = ({
                 </p>
                 <p className="ant-upload-text">Upload Car Model (.glb)</p>
               </Dragger>
+            </Form.Item>
+
+            <Form.Item label="Show License Plates">
+              <Switch
+                checked={showPlates}
+                onChange={(checked) => setShowPlates(checked)}
+              />
             </Form.Item>
 
             {showPlates && (
@@ -624,7 +775,8 @@ const ModelsModal = ({
               }}
             >
               <ambientLight intensity={0.5} />
-              <directionalLight position={[2, 2, 2]} />
+              <directionalLight position={[2, 2, 2]} intensity={1} />
+              <directionalLight position={[-2, 2, -2]} intensity={0.5} />
               <OrbitControls />
 
               {carFileUrl && (
@@ -640,18 +792,19 @@ const ModelsModal = ({
 
               {showPlates && (
                 <>
-                  <ModelViewer
+                  <PlateViewer
                     fileUrl={frontPlateFileUrl}
                     position={plateSettings.front.position}
                     rotation={plateSettings.front.rotation}
                     scale={plateSettings.front.scale}
                   />
-                  <ModelViewer
+                  <PlateViewer
                     fileUrl={backPlateFileUrl}
                     position={plateSettings.back.position}
                     rotation={plateSettings.back.rotation}
                     scale={plateSettings.back.scale}
                   />
+                  <axesHelper args={[5]} />
                 </>
               )}
             </Canvas>
