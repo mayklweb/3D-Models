@@ -19,6 +19,8 @@ export default function Models() {
   const [form] = Form.useForm();
   const [open, setOpen] = useState(false);
   const [isUpdate, setIsUpdate] = useState(null);
+  const [showPlates, setShowPlates] = useState(false);
+
   const deleteModal = useDeleteModal();
   const [carFileUrl, setCarFileUrl] = useState(null);
   const [apiUrl, setApiUrl] = useState(null); // API dan kelgan eski model URL
@@ -47,10 +49,9 @@ export default function Models() {
   };
 
   const handleEdit = (item) => {
-    console.log(item);
     setCarFileUrl(item.file)
     console.log(item.file);
-    
+    setShowPlates(true)
     form.setFieldsValue(item);
     setIsUpdate(item.id);
     setOpen(true);
@@ -128,6 +129,8 @@ export default function Models() {
           apiUrl={apiUrl}
           setApiUrl={setApiUrl}
           openSuccessNotification={openSuccessNotification}
+          showPlates={showPlates}
+          setShowPlates={setShowPlates}
         />
       </div>
     </App>
